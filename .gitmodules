@@ -1,0 +1,9 @@
+[submodule "thirdparty/PolyHook"]
+	path = thirdparty/PolyHook
+	url = https://github.com/stevemk14ebr/PolyHook.git
+[submodule "thirdparty/capstone"]
+	path = thirdparty/capstone
+	url = https://github.com/stevemk14ebr/capstone.git
+[submodule "thirdparty/spdlog"]
+	path = thirdparty/spdlog
+	url = https://github.com/gabime/spdlog.git
