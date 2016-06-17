@@ -2,16 +2,25 @@
 #include <spdlog/spdlog.h>
 #include <PolyHook/PolyHook.h>
 #include "AntiDebug.h"
+#include "APB/APB.h"
 
 void Initialise()
 {
-    auto logger = spdlog::get("logger");
-
-    // Specific init goes here
     AntiDebug::DisableAntiDebug();
+    SRPHook::Initialise();
+    CryptHook::Initialise();
+    NetworkHook::Initialise();
 }
 
-DWORD WINAPI OnAttach(LPVOID lpThreadParameter)
+void Shutdown()
+{
+    AntiDebug::Cleanup();
+    SRPHook::Shutdown();
+    CryptHook::Shutdown();
+    NetworkHook::Shutdown();
+}
+
+void PreInitialise()
 {
     // Create console window and redirect stdout
     AllocConsole();
@@ -42,6 +51,13 @@ DWORD WINAPI OnAttach(LPVOID lpThreadParameter)
     {
         logger->warn("Failed to initialise file sink, log file will be unavailable ({})", *fileError);
     }
+}
+
+DWORD WINAPI OnAttach(LPVOID lpThreadParameter)
+{
+    PreInitialise();
+
+    auto logger = spdlog::get("logger");
 
     try
     {
@@ -53,6 +69,20 @@ DWORD WINAPI OnAttach(LPVOID lpThreadParameter)
         logger->error("Failed to initialise DLL ({})", ex.what());
     }
 
+    // Wait for key press to unload DLL
+    while (true)
+    {
+        if (GetAsyncKeyState(VK_F9))
+        {
+            logger->info("Unloading DLL");
+            break;
+        }
+        Sleep(100);
+    }
+
+    Shutdown();
+    FreeLibraryAndExitThread((HMODULE)lpThreadParameter, 0);
+
     return 0;
 }
 
@@ -62,7 +92,7 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
     {
     case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls(hModule);
-        CreateThread(NULL, 0, OnAttach, NULL, 0, NULL);
+        CreateThread(NULL, 0, OnAttach, hModule, 0, NULL);
         break;
     case DLL_PROCESS_DETACH:
         break;

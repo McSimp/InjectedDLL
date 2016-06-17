@@ -13,6 +13,8 @@ namespace AntiDebug
     PLH::Detour detNtSIT;
     PLH::Detour detNtQIP;
 
+    std::shared_ptr<spdlog::logger> logger;
+
     NTSTATUS NTAPI hkNtSetInformationThread(
         __in HANDLE ThreadHandle,
         __in THREAD_INFORMATION_CLASS ThreadInformationClass,
@@ -24,7 +26,7 @@ namespace AntiDebug
 
         if (ThreadInformationClass == 17 && ThreadInformation == nullptr && ThreadInformationLength == 0) // ThreadHideFromDebugger
         {
-            spdlog::get("logger")->info("NtSetInformationThread called with ThreadHideFromDebugger (Thread ID = %d)\n", GetCurrentThreadId());
+            logger->info("NtSetInformationThread called with ThreadHideFromDebugger (Thread ID = %d)\n", GetCurrentThreadId());
             return STATUS_SUCCESS;
         }
 
@@ -64,9 +66,21 @@ namespace AntiDebug
 
     void DisableAntiDebug()
     {
-        Util::HookRuntimeFunction(detNtSIT, "ntdll.dll", "NtSetInformationThread", &hkNtSetInformationThread);
-        Util::HookRuntimeFunction(detNtQIP, "ntdll.dll", "NtQueryInformationProcess", &hkNtQueryInformationProcess);
+        logger = spdlog::get("logger");
 
-        spdlog::get("logger")->info("Anti-debug APIs hooked successfully");
+        Util::HookLibraryFunction(detNtSIT, "ntdll.dll", "NtSetInformationThread", &hkNtSetInformationThread);
+        Util::HookLibraryFunction(detNtQIP, "ntdll.dll", "NtQueryInformationProcess", &hkNtQueryInformationProcess);
+
+        logger->info("Anti-debug APIs hooked successfully");
+    }
+
+    void Cleanup()
+    {
+        logger->info("Unhooking Anti-debug APIs");
+
+        detNtSIT.UnHook();
+        detNtQIP.UnHook();
+
+        logger->info("Anti-debug APIs unhooked successfully");
     }
 }

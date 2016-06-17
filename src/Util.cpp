@@ -40,7 +40,7 @@ namespace Util
         return output;
     }
 
-    void HookRuntimeFunction(PLH::Detour& detour, const std::string& module, const std::string& funcName, void* hookFunc)
+    void HookLibraryFunction(PLH::Detour& detour, const std::string& module, const std::string& funcName, void* hookFunc)
     {
         HMODULE hModule = GetModuleHandle(Util::Widen(module).c_str());
         if (!hModule)
@@ -61,5 +61,21 @@ namespace Util
             PLH::RuntimeError err = detour.GetLastError();
             throw std::runtime_error(fmt::sprintf("Hook failed for %s: %s", funcName, err.GetString()));
         }
+    }
+
+    void* HookSignatureFunction(PLH::Detour& detour, ModuleScan& scanner, const char* sig, const char* mask, void* hookFunc)
+    {
+        int sigLen = strlen(mask);
+        void* sigAddr = scanner.Scan(sig, mask, sigLen);
+
+        detour.SetupHook((BYTE*)sigAddr, (BYTE*)hookFunc);
+
+        if (!detour.Hook())
+        {
+            PLH::RuntimeError err = detour.GetLastError();
+            throw std::runtime_error(fmt::sprintf("Hook failed for signature %s: %s", Util::DataToHex(sig, sigLen), err.GetString()));
+        }
+
+        return sigAddr;
     }
 }
