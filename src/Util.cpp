@@ -42,17 +42,7 @@ namespace Util
 
     void HookLibraryFunction(PLH::Detour& detour, const std::string& module, const std::string& funcName, void* hookFunc)
     {
-        HMODULE hModule = GetModuleHandle(Util::Widen(module).c_str());
-        if (!hModule)
-        {
-            throw std::runtime_error(fmt::sprintf("GetModuleHandle failed for %s (Error = 0x%X)", module, GetLastError()));
-        }
-
-        FARPROC funcAddr = GetProcAddress(hModule, funcName.c_str());
-        if (!funcAddr)
-        {
-            throw std::runtime_error(fmt::sprintf("GetProcAddress failed for %s (Error = 0x%X)", funcName, GetLastError()));
-        }
+        void* funcAddr = ResolveLibraryFunction(module, funcName);
 
         detour.SetupHook((BYTE*)funcAddr, (BYTE*)hookFunc);
 
@@ -77,5 +67,22 @@ namespace Util
         }
 
         return sigAddr;
+    }
+
+    void* ResolveLibraryFunction(const std::string& module, const std::string& funcName)
+    {
+        HMODULE hModule = GetModuleHandle(Util::Widen(module).c_str());
+        if (!hModule)
+        {
+            throw std::runtime_error(fmt::sprintf("GetModuleHandle failed for %s (Error = 0x%X)", module, GetLastError()));
+        }
+
+        FARPROC funcAddr = GetProcAddress(hModule, funcName.c_str());
+        if (!funcAddr)
+        {
+            throw std::runtime_error(fmt::sprintf("GetProcAddress failed for %s (Error = 0x%X)", funcName, GetLastError()));
+        }
+
+        return funcAddr;
     }
 }

@@ -22,8 +22,34 @@ namespace SRPHook
         void* allocator;
     } cstr;
 
+    typedef void* BigInteger;
+
+    typedef struct srp_st {
+        int magic;
+        int flags;
+        cstr* username;
+        BigInteger modulus;
+        BigInteger generator;
+        cstr* salt;
+        BigInteger verifier;
+        BigInteger password;
+        BigInteger pubkey;
+        BigInteger secret;
+        BigInteger u;
+        BigInteger key;
+        cstr* ex_data;
+        void* meth;
+        void* meth_data;
+        void* bctx;
+        void* accel;
+        void* param_cb;
+        void* slu;
+    } SRP;
+
     typedef int SRP_RESULT;
-    typedef void SRP;
+
+    typedef int(*tBigIntegerToBytes)(BigInteger src, unsigned char* dest, int destlen);
+    tBigIntegerToBytes pBigIntegerToBytes;
 
     SRP_RESULT hkSRPSetUsername(SRP* srp, const char* username)
     {
@@ -53,7 +79,22 @@ namespace SRPHook
     SRP_RESULT hkGenPub(SRP* srp, cstr** result)
     {
         SRP_RESULT retVal = detGenPub.GetOriginal<decltype(&hkGenPub)>()(srp, result);
-        logger->info("SRP_gen_pub: result = {}", Util::DataToHex((*result)->data, (*result)->length));
+
+        logger->info("SRP_gen_pub:");
+        logger->info("    pubkey = {}", Util::DataToHex((*result)->data, (*result)->length));
+
+        // Grab the generated private key too
+        unsigned char privKey[512];
+        int privLength = pBigIntegerToBytes(srp->secret, privKey, sizeof(privKey));
+        if (privLength != 0)
+        {
+            logger->info("    privkey = {}", Util::DataToHex((const char*)privKey, privLength));
+        }
+        else
+        {
+            logger->error("    Failed to retrieve private key");
+        }
+        
         return retVal;
     }
 
@@ -84,6 +125,8 @@ namespace SRPHook
         Util::HookLibraryFunction(detGenPub, "srp32.dll", "SRP_gen_pub", &hkGenPub);
         Util::HookLibraryFunction(detComputeKey, "srp32.dll", "SRP_compute_key", &hkComputeKey);
         Util::HookLibraryFunction(detRespond, "srp32.dll", "SRP_respond", &hkRespond);
+
+        pBigIntegerToBytes = (tBigIntegerToBytes)Util::ResolveLibraryFunction("srp32.dll", "BigIntegerToBytes");
 
         logger->info("SRP functions hooked");
     }
