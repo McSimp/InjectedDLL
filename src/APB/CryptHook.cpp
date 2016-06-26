@@ -10,6 +10,7 @@ namespace CryptHook
     PLH::Detour detCryptGenKey;
     PLH::Detour detCryptImportKey;
     PLH::Detour detCryptEncrypt;
+    PLH::Detour detCryptDecrypt;
     PLH::Detour detRC4SetKey;
     PLH::Detour detSHA1Update;
 
@@ -99,6 +100,36 @@ namespace CryptHook
         return result;
     }
 
+    BOOL WINAPI hkCryptDecrypt(HCRYPTKEY hKey, HCRYPTHASH hHash, BOOL Final, DWORD dwFlags, BYTE* pbData, DWORD* pdwDataLen)
+    {
+        if (pbData == nullptr)
+        {
+            return detCryptDecrypt.GetOriginal<decltype(&hkCryptDecrypt)>()(hKey, hHash, Final, dwFlags, pbData, pdwDataLen);
+        }
+
+        logger->info("CryptDecrypt:");
+        logger->info("    hKey = 0x{:X}", hKey);
+        logger->info("    hHash = 0x{:X}", hHash);
+        logger->info("    Final = {}", Final);
+        logger->info("    dwFlags = 0x{:X}", dwFlags);
+        logger->info("    encryptedDataLen = {}", *pdwDataLen);
+        logger->info("    encryptedData = {}", Util::DataToHex((const char*)pbData, *pdwDataLen));
+
+        BOOL result = detCryptDecrypt.GetOriginal<decltype(&hkCryptDecrypt)>()(hKey, hHash, Final, dwFlags, pbData, pdwDataLen);
+
+        if (result)
+        {
+            logger->info("    plainDataLen = {}", *pdwDataLen);
+            logger->info("    plainData = {}", Util::DataToHex((const char*)pbData, *pdwDataLen));
+        }
+        else
+        {
+            logger->info("    Failed to decrpyt data (Error = {})", GetLastError());
+        }
+
+        return result;
+    }
+
     void hkRC4SetKey(void* key, int len, const unsigned char* data)
     {
         logger->info("RC4_set_key:");
@@ -126,6 +157,7 @@ namespace CryptHook
         Util::HookLibraryFunction(detCryptGenKey, "Advapi32.dll", "CryptGenKey", &hkCryptGenKey);
         Util::HookLibraryFunction(detCryptImportKey, "Advapi32.dll", "CryptImportKey", &hkCryptImportKey);
         Util::HookLibraryFunction(detCryptEncrypt, "Advapi32.dll", "CryptEncrypt", &hkCryptEncrypt);
+        Util::HookLibraryFunction(detCryptDecrypt, "Advapi32.dll", "CryptDecrypt", &hkCryptDecrypt);
         Util::HookLibraryFunction(detRC4SetKey, "LIBEAY32.dll", "RC4_set_key", &hkRC4SetKey);
         Util::HookLibraryFunction(detSHA1Update, "LIBEAY32.dll", "SHA1_Update", &hkSHA1Update);
 
@@ -139,6 +171,7 @@ namespace CryptHook
         detCryptGenKey.UnHook();
         detCryptImportKey.UnHook();
         detCryptEncrypt.UnHook();
+        detCryptDecrypt.UnHook();
         detRC4SetKey.UnHook();
         detSHA1Update.UnHook();
 
