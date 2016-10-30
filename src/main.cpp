@@ -10,6 +10,7 @@ void Initialise()
     SRPHook::Initialise();
     CryptHook::Initialise();
     NetworkHook::Initialise();
+    CompressionHook::Initialise();
 }
 
 void Shutdown()
@@ -18,6 +19,7 @@ void Shutdown()
     SRPHook::Shutdown();
     CryptHook::Shutdown();
     NetworkHook::Shutdown();
+    CompressionHook::Shutdown();
 }
 
 void PreInitialise()

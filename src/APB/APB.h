@@ -17,3 +17,9 @@ namespace SRPHook
     void Initialise();
     void Shutdown();
 }
+
+namespace CompressionHook
+{
+    void Initialise();
+    void Shutdown();
+}

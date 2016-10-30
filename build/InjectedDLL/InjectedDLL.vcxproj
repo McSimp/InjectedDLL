@@ -164,6 +164,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\AntiDebug.cpp" />
+    <ClCompile Include="..\..\src\APB\CompressionHook.cpp" />
     <ClCompile Include="..\..\src\APB\CryptHook.cpp" />
     <ClCompile Include="..\..\src\APB\NetworkHook.cpp" />
     <ClCompile Include="..\..\src\APB\SRPHook.cpp" />

@@ -42,6 +42,9 @@
     <ClCompile Include="..\..\src\APB\NetworkHook.cpp">
       <Filter>Source Files\APB</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\APB\CompressionHook.cpp">
+      <Filter>Source Files\APB</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\MemorySignature.h">
