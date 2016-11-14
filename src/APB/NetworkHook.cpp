@@ -16,6 +16,11 @@ namespace NetworkHook
     PLH::Detour detRecvFrom;
     PLH::Detour detReceivedRawPacket;
     PLH::Detour detLowLevelSend;
+    PLH::Detour detSendAck;
+    PLH::Detour detFlushNet;
+    PLH::Detour detReceivedNak;
+    PLH::Detour detTcpTickDispatch;
+    PLH::Detour detTickFlush;
 
     std::shared_ptr<spdlog::logger> logger;
 
@@ -122,6 +127,59 @@ namespace NetworkHook
         return detLowLevelSend.GetOriginal<tLowLevelSend>()(thisPtr, Data, Count);
     }
 
+    typedef int(__thiscall* tSendAck)(void* thisPtr, int AckPacketId, int FirstTime);
+    int __fastcall hkSendAck(void* thisPtr, void* edx, int AckPacketId, int FirstTime)
+    {
+        logger->info("SendAck:");
+        logger->info("    AckPacketId = {}", AckPacketId);
+        logger->info("    FirstTime = {}", FirstTime);
+
+        return detSendAck.GetOriginal<tSendAck>()(thisPtr, AckPacketId, FirstTime);
+    }
+
+    typedef int(__thiscall* tFlushNet)(void* thisPtr, int IgnoreSimulation);
+    int __fastcall hkFlushNet(void* thisPtr, void* edx, int IgnoreSimulation)
+    {
+        logger->info("FlushNet:");
+        logger->info("    IgnoreSimulation = {}", IgnoreSimulation);
+
+        return detFlushNet.GetOriginal<tFlushNet>()(thisPtr, IgnoreSimulation);
+    }
+
+    typedef int(__thiscall* tReceivedNak)(void* thisPtr, int NakPacketId);
+    int __fastcall hkReceivedNak(void* thisPtr, void* edx, int NakPacketId)
+    {
+        logger->info("ReceivedNak:");
+        logger->info("    NakPacketId = {}", NakPacketId);
+
+        return detReceivedNak.GetOriginal<tReceivedNak>()(thisPtr, NakPacketId);
+    }
+
+    typedef int(__thiscall* tTcpTickDispatch)(void* thisPtr, float DeltaTime);
+    int __fastcall hkTcpTickDispatch(void* thisPtr, void* edx, float DeltaTime)
+    {
+        logger->info("Start UTcpNetDriver::TickDispatch:");
+        logger->info("    DeltaTime = {}", DeltaTime);
+
+        int retVal = detTcpTickDispatch.GetOriginal<tTcpTickDispatch>()(thisPtr, DeltaTime);
+
+        logger->info("Finish UTcpNetDriver::TickDispatch");
+
+        return retVal;
+    }
+
+    typedef int(__thiscall* tTickFlush)(void* thisPtr);
+    int __fastcall hkTickFlush(void* thisPtr, void* edx)
+    {
+        logger->info("Start UNetDriver::TickFlush:");
+
+        int retVal = detTickFlush.GetOriginal<tTickFlush>()(thisPtr);
+
+        logger->info("Finish UNetDriver::TickFlush");
+
+        return retVal;
+    }
+
     void Initialise()
     {
         logger = spdlog::get("logger");
@@ -129,15 +187,20 @@ namespace NetworkHook
 
         ModuleScan APBScan("APB.exe");
 
-        Util::HookLibraryFunction(detSend, "wsock32.dll", "send", &hkSend);
-        Util::HookSignatureFunction(detSendWrapper, APBScan, "\x55\x8B\xEC\x56\x8B\xF1\x83\x7E\x04\x03", "xxxxxxxxxx", &hkSendWrapper);
-        Util::HookLibraryFunction(detRecv, "wsock32.dll", "recv", &hkRecv);
-        Util::HookSignatureFunction(detLobbyPacketHandler, APBScan, "\x55\x8B\xEC\x56\x8B\x75\x08\x8B\x46\x04\x05", "xxxxxxxxxxx", &hkLobbyPacketHandler);
-        Util::HookSignatureFunction(detWorldPacketHandler, APBScan, "\x55\x8B\xEC\x8B\x45\x08\x56\x8B\x50\x04\x8D\xB2", "xxxxxxxxxxxx", &hkWorldPacketHandler);
-        Util::HookLibraryFunction(detSendTo, "wsock32.dll", "sendto", &hkSendTo);
-        Util::HookLibraryFunction(detRecvFrom, "wsock32.dll", "recvfrom", &hkRecvFrom);
-        Util::HookSignatureFunction(detReceivedRawPacket, APBScan, "\x55\x8B\xEC\x83\xEC\x38\x56\x8B\x75\x0C", "xxxxxxxxxx", &hkReceivedRawPacket);
-        Util::HookSignatureFunction(detLowLevelSend, APBScan, "\x55\x8B\xEC\x83\xEC\x1C\x56\x8B\xF1\x8B\x8E\x00\x00\x00\x00\x85\xC9\x0F\x84\x00\x00\x00\x00\x8B\x01\xFF\x50\x04", "xxxxxxxxxxx????xxxx????xxxxx", &hkLowLevelSend);
+        Util::HookLibraryFunction(detSend, "wsock32.dll", "send", &hkSend); logger->info("Hooked send");
+        Util::HookSignatureFunction(detSendWrapper, APBScan, "\x55\x8B\xEC\x56\x8B\xF1\x83\x7E\x04\x03", "xxxxxxxxxx", &hkSendWrapper); logger->info("Hooked SendWrapper");
+        Util::HookLibraryFunction(detRecv, "wsock32.dll", "recv", &hkRecv); logger->info("Hooked recv");
+        Util::HookSignatureFunction(detLobbyPacketHandler, APBScan, "\x55\x8B\xEC\x56\x8B\x75\x08\x8B\x46\x04\x05", "xxxxxxxxxxx", &hkLobbyPacketHandler); logger->info("Hooked LobbyPacketHandler");
+        Util::HookSignatureFunction(detWorldPacketHandler, APBScan, "\x55\x8B\xEC\x8B\x45\x08\x56\x8B\x50\x04\x8D\xB2", "xxxxxxxxxxxx", &hkWorldPacketHandler); logger->info("Hooked WorldPacketHandler");
+        Util::HookLibraryFunction(detSendTo, "wsock32.dll", "sendto", &hkSendTo); logger->info("Hooked sendto");
+        Util::HookLibraryFunction(detRecvFrom, "wsock32.dll", "recvfrom", &hkRecvFrom); logger->info("Hooked recvfrom");
+        Util::HookSignatureFunction(detReceivedRawPacket, APBScan, "\x55\x8B\xEC\x83\xEC\x38\x56\x8B\x75\x0C", "xxxxxxxxxx", &hkReceivedRawPacket); logger->info("Hooked ReceivedRawPacket");
+        Util::HookSignatureFunction(detLowLevelSend, APBScan, "\x55\x8B\xEC\x83\xEC\x1C\x56\x8B\xF1\x8B\x8E\x00\x00\x00\x00\x85\xC9\x0F\x84\x00\x00\x00\x00\x8B\x01\xFF\x50\x04", "xxxxxxxxxxx????xxxx????xxxxx", &hkLowLevelSend); logger->info("Hooked LowLevelSend");
+        Util::HookSignatureFunction(detSendAck, APBScan, "\x55\x8B\xEC\x83\xEC\x14\x57\x6A\x01\x8B\xF9", "xxxxxxxxxxx", &hkSendAck); logger->info("Hooked SendAck");
+        Util::HookSignatureFunction(detFlushNet, APBScan, "\x55\x8B\xEC\x83\xEC\x10\x8B\x45\xF0", "xxxxxxxxx", &hkFlushNet); logger->info("Hooked FlushNet");
+        Util::HookSignatureFunction(detReceivedNak, APBScan, "\x55\x8B\xEC\x51\x8B\xC1\x56\x8B\xB0\x00\x00\x00\x00\x4E\x89\x45\xFC\x78\x35", "xxxxxxxxx????xxxxxx", &hkReceivedNak); logger->info("Hooked ReceivedNak");
+        Util::HookSignatureFunction(detTcpTickDispatch, APBScan, "\x55\x8B\xEC\x81\xEC\x00\x00\x00\x00\x53\x56\x8B\xD9\x57\x89\x5D\xE4\xE8\x00\x00\x00\x00\xF3\x0F\x10\x83", "xxxxx????xxxxxxxxx????xxxx", &hkTcpTickDispatch); logger->info("Hooked TcpTickDispatch");
+        Util::HookSignatureFunction(detTickFlush, APBScan, "\x56\x8B\xF1\x57\xF3\x0F\x10\x86\x00\x00\x00\x00\xF2\x0F\x10\x4E", "xxxxxxxx????xxxx", &hkTickFlush); logger->info("Hooked TickFlush");
 
         logger->info("Network functions hooked");
     }
@@ -153,6 +216,12 @@ namespace NetworkHook
         detWorldPacketHandler.UnHook();
         detSendTo.UnHook();
         detReceivedRawPacket.UnHook();
+        detLowLevelSend.UnHook();
+        detSendAck.UnHook();
+        detFlushNet.UnHook();
+        detReceivedNak.UnHook();
+        detTcpTickDispatch.UnHook();
+        detTickFlush.UnHook();
 
         logger->info("Network functions unhooked");
     }
