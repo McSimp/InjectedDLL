@@ -4,6 +4,7 @@
 #include "../Util.h"
 #include <WinSock2.h>
 #include "../ModuleScan.h"
+#include <codecvt>
 
 namespace NetworkHook
 {
@@ -21,6 +22,7 @@ namespace NetworkHook
     PLH::Detour detReceivedNak;
     PLH::Detour detTcpTickDispatch;
     PLH::Detour detTickFlush;
+    PLH::Detour detSendBunch;
 
     std::shared_ptr<spdlog::logger> logger;
 
@@ -179,9 +181,77 @@ namespace NetworkHook
 
         return retVal;
     }
+    
+    
+    template <typename T> class TArray
+    {
+    public:
+        T* AllocatorInstance;
+        INT	  ArrayNum;
+        INT	  ArrayMax;
+    };
+
+    class FBitWriter
+    {
+    public:
+        unsigned char _data[0x24];
+        TArray<unsigned char> Buffer;
+        INT Num;
+        INT Max;
+    };
+
+    class FOutBunch : public FBitWriter
+    {
+    public:
+        void* Next;
+        void* Channel;
+        double Time;
+        unsigned int ReceivedAck;
+        int ChIndex;
+        int ChType;
+        int ChSequence;
+        int PacketId;
+        unsigned char bOpen;
+        unsigned char bClose;
+        unsigned char bReliable;
+    };
+
+    class UChannel
+    {
+    public:
+        void** vtable;
+    };
+
+    class FString : public TArray<TCHAR>
+    {
+        
+    };
+
+    typedef int(__thiscall* tSendBunch)(UChannel* thisPtr, FOutBunch* Bunch, int Merge);
+    typedef FString(__thiscall* tDescribe)(UChannel* thisPtr);
+
+    int __fastcall hkSendBunch(UChannel* thisPtr, void* edx, FOutBunch* Bunch, int Merge)
+    {
+        logger->info("UChannel::SendBunch");
+
+
+        logger->info("    ChIndex = {}, ChType = {}, bOpen = {}, bClose = {}, bReliable = {}", Bunch->ChIndex, Bunch->ChType, Bunch->bOpen, Bunch->bClose, Bunch->bReliable);
+        logger->info("    NumBits = {}", Bunch->Num);
+        logger->info("    Data = {}", Util::DataToHex((const char*)Bunch->Buffer.AllocatorInstance, (Bunch->Num + 8 - 1) / 8));
+
+        return detSendBunch.GetOriginal<tSendBunch>()(thisPtr, Bunch, Merge);
+    }
 
     void Initialise()
     {
+        // Ensure FOutBunch matches the structure in the game
+        static_assert(offsetof(FBitWriter, Num) == 0x30, "FBitWriter.Num offset is invalid");
+        static_assert(offsetof(FOutBunch, Next) == 0x38, "FOutBunch.Next offset is invalid");
+        static_assert(offsetof(FOutBunch, Channel) == 0x3C, "FOutBunch.Channel offset is invalid");
+        static_assert(offsetof(FOutBunch, Time) == 0x40, "FOutBunch.Time offset is invalid");
+        static_assert(offsetof(FOutBunch, ChIndex) == 0x4C, "FOutBunch.ChIndex offset is invalid");
+        static_assert(offsetof(FOutBunch, bReliable) == 0x5E, "FOutBunch.bReliable offset is invalid");
+
         logger = spdlog::get("logger");
         logger->info("Hooking Network functions");
 
@@ -201,6 +271,7 @@ namespace NetworkHook
         Util::HookSignatureFunction(detReceivedNak, APBScan, "\x55\x8B\xEC\x51\x8B\xC1\x56\x8B\xB0\x00\x00\x00\x00\x4E\x89\x45\xFC\x78\x35", "xxxxxxxxx????xxxxxx", &hkReceivedNak); logger->info("Hooked ReceivedNak");
         Util::HookSignatureFunction(detTcpTickDispatch, APBScan, "\x55\x8B\xEC\x81\xEC\x00\x00\x00\x00\x53\x56\x8B\xD9\x57\x89\x5D\xE4\xE8\x00\x00\x00\x00\xF3\x0F\x10\x83", "xxxxx????xxxxxxxxx????xxxx", &hkTcpTickDispatch); logger->info("Hooked TcpTickDispatch");
         Util::HookSignatureFunction(detTickFlush, APBScan, "\x56\x8B\xF1\x57\xF3\x0F\x10\x86\x00\x00\x00\x00\xF2\x0F\x10\x4E", "xxxxxxxx????xxxx", &hkTickFlush); logger->info("Hooked TickFlush");
+        Util::HookSignatureFunction(detSendBunch, APBScan, "\x55\x8B\xEC\x53\x8B\x5D\x08\x56\x57\x8B\xF9\x83\x7F\x50\xFF", "xxxxxxxxxxxxxxx", &hkSendBunch); logger->info("Hooked SendBunch");
 
         logger->info("Network functions hooked");
     }
@@ -222,6 +293,7 @@ namespace NetworkHook
         detReceivedNak.UnHook();
         detTcpTickDispatch.UnHook();
         detTickFlush.UnHook();
+        detSendBunch.UnHook();
 
         logger->info("Network functions unhooked");
     }

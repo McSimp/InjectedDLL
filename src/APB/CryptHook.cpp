@@ -13,6 +13,7 @@ namespace CryptHook
     PLH::Detour detCryptDecrypt;
     PLH::Detour detRC4SetKey;
     PLH::Detour detSHA1Update;
+    PLH::Detour detXXTEADecrypt;
 
     std::shared_ptr<spdlog::logger> logger;
     std::vector<unsigned char> lastSHA1Data;
@@ -149,10 +150,26 @@ namespace CryptHook
         return detSHA1Update.GetOriginal<decltype(&hkSHA1Update)>()(c, data, len);
     }
 
+    int hkXXTEADecrypt(uint32_t* data, int n, uint32_t* key, int rounds)
+    {
+        logger->info("XXTEA_Decrypt:");
+        logger->info("    key = {}", Util::DataToHex((const char*)key, 16));
+        logger->info("    rounds = {}", rounds);
+        logger->info("    encrypted = {}", Util::DataToHex((const char*)data, n*4));
+
+        int result = detXXTEADecrypt.GetOriginal<decltype(&hkXXTEADecrypt)>()(data, n, key, rounds);
+
+        logger->info("    decrypted = {}", Util::DataToHex((const char*)data, n * 4));
+
+        return result;
+    }
+
     void Initialise()
     {
         logger = spdlog::get("logger");
         logger->info("Hooking Crypt functions");
+
+        ModuleScan APBScan("APB.exe");
 
         Util::HookLibraryFunction(detCryptGenKey, "Advapi32.dll", "CryptGenKey", &hkCryptGenKey);
         Util::HookLibraryFunction(detCryptImportKey, "Advapi32.dll", "CryptImportKey", &hkCryptImportKey);
@@ -160,6 +177,7 @@ namespace CryptHook
         Util::HookLibraryFunction(detCryptDecrypt, "Advapi32.dll", "CryptDecrypt", &hkCryptDecrypt);
         Util::HookLibraryFunction(detRC4SetKey, "LIBEAY32.dll", "RC4_set_key", &hkRC4SetKey);
         Util::HookLibraryFunction(detSHA1Update, "LIBEAY32.dll", "SHA1_Update", &hkSHA1Update);
+        Util::HookSignatureFunction(detXXTEADecrypt, APBScan, "\x55\x8B\xEC\x83\xEC\x08\x8B\x55\x14\x56", "xxxxxxxxxx", &hkXXTEADecrypt);
 
         logger->info("Crypt functions hooked");
     }
@@ -174,6 +192,7 @@ namespace CryptHook
         detCryptDecrypt.UnHook();
         detRC4SetKey.UnHook();
         detSHA1Update.UnHook();
+        detXXTEADecrypt.UnHook();
 
         logger->info("Crypt functions unhooked");
     }
